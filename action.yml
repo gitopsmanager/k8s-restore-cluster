@@ -1,0 +1,283 @@
+name: Restore Cluster and Deploy ArgoCD (Matrix + Aggregation)
+
+on:
+  workflow_dispatch:
+    inputs:
+      ClusterRestoreSource:
+        description: "Optional: Source cluster directory name"
+        required: false
+        default: ""
+        type: string
+      ClusterRestoreTarget:
+        description: "Target cluster directory name (required)"
+        required: true
+        type: string
+      namespace_filter:
+        description: >
+          Optional comma-separated list of namespaces or namespace:app pairs
+          (e.g. 'prod,qa:web')
+        required: false
+        default: ""
+        type: string
+      cd_repo_org:
+        description: "GitHub org/owner of continuous-deployment repo"
+        required: true
+        type: string
+      cd_repo:
+        description: "Continuous-deployment repository name"
+        required: true
+        type: string
+      argocd_auth_token:
+        description: "ArgoCD auth token"
+        required: true
+        type: string
+      insecure_argo:
+        required: false
+        default: false
+        type: boolean
+      delete_first:
+        required: false
+        default: false
+        type: boolean
+      delete_only:
+        required: false
+        default: false
+        type: boolean
+      skip_status_check:
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.build.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate GitHub App token
+        id: token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.CONTINUOUS_DEPLOYMENT_GH_APP_ID }}
+          private-key: ${{ secrets.CONTINUOUS_DEPLOYMENT_GH_APP_PRIVATE_KEY }}
+          owner: ${{ inputs.cd_repo_org }}
+          repositories: ${{ inputs.cd_repo }}
+
+      # --- Validate and restore logic ---
+      - name: Validate and Restore Cluster
+        id: restore
+        run: |
+          set -euo pipefail
+          SRC="${{ inputs.ClusterRestoreSource }}"
+          TGT="${{ inputs.ClusterRestoreTarget }}"
+          SRC_DIR="continuous-deployment/${SRC}"
+          TGT_DIR="continuous-deployment/${TGT}"
+
+          echo "🔍 Validating inputs..."
+          if [ -n "$SRC" ]; then
+            # Source provided → must exist; target must not exist
+            if [ ! -d "$SRC_DIR" ]; then
+              echo "❌ Source '$SRC_DIR' does not exist."
+              exit 1
+            fi
+            if [ -d "$TGT_DIR" ]; then
+              echo "❌ Target '$TGT_DIR' already exists. Refusing to overwrite."
+              exit 1
+            fi
+            echo "📂 Copying $SRC_DIR → $TGT_DIR"
+            cp -r "$SRC_DIR" "$TGT_DIR"
+            echo "🔄 Replacing occurrences of '$SRC' with '$TGT'"
+            find "$TGT_DIR" -type f -exec sed -i "s/${SRC}/${TGT}/g" {} +
+            echo "created=true" >> "$GITHUB_OUTPUT"
+          else
+            # No source provided → must have existing target
+            if [ ! -d "$TGT_DIR" ]; then
+              echo "❌ No source provided and target '$TGT_DIR' does not exist."
+              exit 1
+            fi
+            echo "ℹ️ No source provided. Using existing target cluster '$TGT_DIR'."
+            echo "created=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # --- Commit if new target created ---
+      - name: Auto Commit and Squash Merge
+        if: ${{ steps.restore.outputs.created == 'true' }}
+        uses: gitopsmanager/Auto-Commit-Squash-Merge@main
+        with:
+          token: ${{ steps.token.outputs.token }}
+          repo_owner: ${{ inputs.cd_repo_org }}
+          repo_name: ${{ inputs.cd_repo }}
+          namespace: "cluster-restore"
+          cluster: ${{ inputs.ClusterRestoreTarget }}
+          app_name: "restore"
+          repo_path_rel: "continuous-deployment/${{ inputs.ClusterRestoreTarget }}"
+          delete_only: false
+
+      # --- Build matrix from create.json ---
+      - name: Build Matrix from create.json
+        id: build
+        uses: actions/github-script@v7
+        env:
+          CLUSTER_TARGET: ${{ inputs.ClusterRestoreTarget }}
+          FILTER: ${{ inputs.namespace_filter }}
+        with:
+          script: |
+            const fs = require("fs");
+            const path = require("path");
+
+            const clusterDir = path.join("continuous-deployment", process.env.CLUSTER_TARGET);
+            if (!fs.existsSync(clusterDir)) {
+              core.setFailed(`Cluster directory not found: ${clusterDir}`);
+              return;
+            }
+
+            const filters = (process.env.FILTER || "")
+              .split(",")
+              .map(s => s.trim())
+              .filter(Boolean);
+
+            const files = [];
+            function walk(dir) {
+              for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+                const full = path.join(dir, e.name);
+                if (e.isDirectory()) walk(full);
+                else if (e.name === "create.json") files.push(full);
+              }
+            }
+            walk(clusterDir);
+
+            if (files.length === 0) {
+              core.warning(`⚠️ No create.json found under ${clusterDir}`);
+              return core.setOutput("matrix", "[]");
+            }
+
+            const matrix = [];
+            for (const f of files) {
+              const json = JSON.parse(fs.readFileSync(f, "utf8"));
+              const ns = json.namespace || "";
+              const overlay = json.overlay_dir || "";
+              const cluster = json.cluster || "";
+              const apps = json.applications || [];
+              const cdPathRel = f.replace(/^continuous-deployment\//, "").replace(/\/overlays\/.*$/, "");
+
+              // Apply namespace/app filtering
+              const matchesNamespace = filters.includes(ns);
+              const matchesApp = apps.some(a => filters.includes(`${ns}:${a.name}`));
+              if (filters.length > 0 && !matchesNamespace && !matchesApp) {
+                core.info(`⏭️ Skipping ${f} (not in filter)`);
+                continue;
+              }
+
+              matrix.push({
+                file: f,
+                cd_path_rel: cdPathRel,
+                namespace: ns,
+                overlay_dir: overlay,
+                cluster: cluster,
+                apps: JSON.stringify(apps)
+              });
+            }
+
+            core.info(`✅ Found ${matrix.length} deployment(s)`);
+            core.setOutput("matrix", JSON.stringify(matrix));
+
+  deploy:
+    needs: restore
+    runs-on: [self-hosted, deployer]
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix:
+        include: ${{ fromJSON(needs.restore.outputs.matrix) }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Construct ArgoCD URL
+        id: build_argo_url
+        run: |
+          echo "url=https://${{ matrix.cluster }}-argocd-argocd-web-ui.example.com" >> $GITHUB_OUTPUT
+
+      - name: Manage ArgoCD Applications
+        uses: gitopsmanager/ArgoCD-Manage-Applications@main
+        with:
+          argocd_url:          ${{ steps.build_argo_url.outputs.url }}
+          argocd_auth_token:   ${{ inputs.argocd_auth_token }}
+          argocd_username:     ${{ secrets.ARGOCD_USERNAME }}
+          argocd_password:     ${{ secrets.ARGOCD_PASSWORD }}
+          insecure_argo:       ${{ inputs.insecure_argo }}
+          argocd_ca_cert:      ${{ secrets.ARGOCD_CA_CERT }}
+          namespace:           ${{ matrix.namespace }}
+          cd_repo:             ${{ inputs.cd_repo }}
+          cd_repo_org:         ${{ inputs.cd_repo_org }}
+          cd_path_rel:         ${{ matrix.cd_path_rel }}
+          overlay_dir:         ${{ matrix.overlay_dir }}
+          apps:                ${{ matrix.apps }}
+          delete_first:        ${{ inputs.delete_first }}
+          delete_only:         ${{ inputs.delete_only }}
+          skip_status_check:   ${{ inputs.skip_status_check }}
+
+      - name: Upload summary artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: argo-summary-${{ matrix.namespace }}-${{ matrix.overlay_dir }}
+          path: summary-${{ matrix.namespace }}-${{ matrix.overlay_dir }}.json
+
+  aggregate:
+    needs: deploy
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Download all summaries
+        uses: actions/download-artifact@v4
+        with:
+          path: summaries
+
+      - name: Combine summaries
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require("fs");
+            const path = require("path");
+            const base = "summaries";
+            const files = [];
+            function walk(dir) {
+              for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+                const full = path.join(dir, e.name);
+                if (e.isDirectory()) walk(full);
+                else if (e.name.endsWith(".json")) files.push(full);
+              }
+            }
+            walk(base);
+
+            if (files.length === 0) {
+              core.warning("⚠️ No summary JSON files found.");
+              return;
+            }
+
+            const combined = {};
+            for (const f of files) {
+              try {
+                const data = JSON.parse(fs.readFileSync(f, "utf8"));
+                for (const [key, val] of Object.entries(data)) combined[key] = val;
+              } catch (err) {
+                core.warning(`⚠️ Could not parse ${f}: ${err.message}`);
+              }
+            }
+
+            const table = [["Namespace/App", "Created", "Synced"]];
+            for (const [key, val] of Object.entries(combined)) {
+              table.push([key, val.created || "❌", val.synced || "❌"]);
+            }
+
+            core.summary.addHeading("📊 Combined ArgoCD Summary").addTable(table).write();
+            core.info("📊 Combined ArgoCD Summary");
+            for (const row of table.slice(1)) {
+              core.info(`${row[0]} | Created: ${row[1]} | Synced: ${row[2]}`);
+            }
+
+            fs.writeFileSync("combined-summary.json", JSON.stringify(combined, null, 2));
+            core.setOutput("combined", JSON.stringify(combined));
