@@ -125,7 +125,7 @@ jobs:
       # --- Commit if new target created ---
       - name: Auto Commit and Squash Merge
         if: ${{ steps.restore.outputs.created == 'true' }}
-        uses: gitopsmanager/Auto-Commit-Squash-Merge@main
+        uses: gitopsmanager/Auto-Commit-Squash-Merge@v1
         with:
           token: ${{ steps.token.outputs.token }}
           repo_owner: ${{ inputs.cd_repo_org }}
@@ -222,7 +222,7 @@ jobs:
           echo "url=https://${{ matrix.cluster }}-argocd-argocd-web-ui.example.com" >> $GITHUB_OUTPUT
 
       - name: Manage ArgoCD Applications
-        uses: gitopsmanager/ArgoCD-Manage-Applications@main
+        uses: gitopsmanager/ArgoCD-Manage-Applications@v1
         with:
           argocd_url:          ${{ steps.build_argo_url.outputs.url }}
           argocd_auth_token:   ${{ inputs.argocd_auth_token }}
