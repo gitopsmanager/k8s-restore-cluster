@@ -48,6 +48,30 @@ on:
         default: false
         type: boolean
 
+    secrets:
+      # --- ArgoCD Authentication (Provide one or the other) ---
+      ARGOCD_AUTH_TOKEN:
+        description: "ArgoCD API authentication token. Provide this OR username/password."
+        required: false
+      ARGOCD_USERNAME:
+        description: "ArgoCD username (used if token not set). Provide this with ARGOCD_PASSWORD."
+        required: false
+      ARGOCD_PASSWORD:
+        description: "ArgoCD password (used if token not set). Provide this with ARGOCD_USERNAME."
+        required: false
+      ARGOCD_CA_CERT:
+        description: "Optional custom CA certificate for ArgoCD."
+        required: false
+
+      # --- GitHub App Secrets (always required) ---
+      CONTINUOUS_DEPLOYMENT_GH_APP_ID:
+        description: "GitHub App ID with write access to the CD repo."
+        required: true
+      CONTINUOUS_DEPLOYMENT_GH_APP_PRIVATE_KEY:
+        description: "GitHub App private key for token generation."
+        required: true
+
+
 jobs:
   restore:
     runs-on: ubuntu-latest
