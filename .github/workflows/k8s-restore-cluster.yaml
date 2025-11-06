@@ -1,7 +1,7 @@
 name: Restore Cluster and Deploy ArgoCD (Matrix + Aggregation)
 
 on:
-  workflow_dispatch:
+  workflow_call:
     inputs:
       ClusterRestoreSource:
         description: "Optional: Source cluster directory name"
@@ -25,10 +25,6 @@ on:
         type: string
       cd_repo:
         description: "Continuous-deployment repository name"
-        required: true
-        type: string
-      argocd_auth_token:
-        description: "ArgoCD auth token"
         required: true
         type: string
       insecure_argo:
@@ -70,6 +66,7 @@ on:
       CONTINUOUS_DEPLOYMENT_GH_APP_PRIVATE_KEY:
         description: "GitHub App private key for token generation."
         required: true
+
 
 
 jobs:
