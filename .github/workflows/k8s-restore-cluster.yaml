@@ -6,12 +6,12 @@ on:
       github_runner:
         required: true
         type: string
-      ClusterRestoreSource:
+      cluster_restore_source:
         description: "Optional: Source cluster directory name"
         required: false
         default: ""
         type: string
-      ClusterRestoreTarget:
+      cluster_restore_target:
         description: "Target cluster directory name (required)"
         required: true
         type: string
@@ -103,8 +103,8 @@ jobs:
         id: restore
         run: |
           set -euo pipefail
-          SRC="${{ inputs.ClusterRestoreSource }}"
-          TGT="${{ inputs.ClusterRestoreTarget }}"
+          SRC="${{ inputs.cluster_restore_source }}"
+          TGT="${{ inputs.cluster_restore_target }}"
           SRC_DIR="continuous-deployment/${SRC}"
           TGT_DIR="continuous-deployment/${TGT}"
 
@@ -143,9 +143,9 @@ jobs:
           repo_owner: ${{ inputs.cd_repo_org }}
           repo_name: ${{ inputs.cd_repo }}
           namespace: "cluster-restore"
-          cluster: ${{ inputs.ClusterRestoreTarget }}
+          cluster: ${{ inputs.cluster_restore_target }}
           app_name: "restore"
-          repo_path_rel: "continuous-deployment/${{ inputs.ClusterRestoreTarget }}"
+          repo_path_rel: "continuous-deployment/${{ inputs.cluster_restore_target }}"
           delete_only: false
 
       # --- Build matrix from create.json ---
@@ -153,7 +153,7 @@ jobs:
         id: build
         uses: actions/github-script@v7
         env:
-          CLUSTER_TARGET: ${{ inputs.ClusterRestoreTarget }}
+          CLUSTER_TARGET: ${{ inputs.cluster_restore_target }}
           FILTER: ${{ inputs.namespace_filter }}
         with:
           script: |
