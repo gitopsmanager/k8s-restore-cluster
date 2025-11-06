@@ -51,8 +51,8 @@ It’s a **turnkey GitOps automation platform** for AWS and Azure — combining 
 
 | Name | Description | Required | Default |
 |------|--------------|-----------|----------|
-| `ClusterRestoreSource` | Optional: source cluster directory name | ❌ No | `""` |
-| `ClusterRestoreTarget` | Target cluster directory name | ✅ Yes | — |
+| `cluster_restore_source` | Optional: source cluster directory name | ❌ No | `""` |
+| `cluster_restore_target` | Target cluster directory name | ✅ Yes | — |
 | `namespace_filter` | Optional comma-separated list of namespaces or namespace:app pairs | ❌ No | `""` |
 | `cd_repo_org` | GitHub org/owner of the continuous-deployment repo | ✅ Yes | — |
 | `cd_repo` | Continuous-deployment repository name | ✅ Yes | — |
@@ -113,8 +113,8 @@ jobs:
   restore:
     uses: gitopsmanager/k8s-deploy/.github/workflows/k8s-restore-cluster.yml@v2
     with:
-      ClusterRestoreSource: "cluster-staging"
-      ClusterRestoreTarget: "cluster-prod"
+      cluster_restore_source: "cluster-staging"
+      cluster_restore_target: "cluster-prod"
       cd_repo_org: "affinity7software"
       cd_repo: "continuous-deployment"
       github_runner: "self-hosted,deployer"
