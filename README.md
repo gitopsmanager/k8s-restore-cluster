@@ -64,6 +64,28 @@ It’s a **turnkey GitOps automation platform** for AWS and Azure — combining 
 
 ---
 
+## 🔒 Secrets
+
+This workflow requires several GitHub **secrets** for authentication and secure operations.  
+Secrets are never logged and must be defined in the **calling repository** (or organization) before triggering the workflow.
+
+| Secret | Required | Description |
+|---------|-----------|-------------|
+| **`ARGOCD_AUTH_TOKEN`** | ❌ | ArgoCD API authentication token. **Preferred method** for automation. Provide **this OR** the username/password pair below. |
+| **`ARGOCD_USERNAME`** | ❌ | ArgoCD username (used if `ARGOCD_AUTH_TOKEN` is not set). Must be provided **together with** `ARGOCD_PASSWORD`. |
+| **`ARGOCD_PASSWORD`** | ❌ | ArgoCD password (used if `ARGOCD_AUTH_TOKEN` is not set). Must be provided **together with** `ARGOCD_USERNAME`. |
+| **`ARGOCD_CA_CERT`** | ❌ | Optional custom CA certificate for ArgoCD. Use when ArgoCD uses a self-signed or private certificate authority. |
+| **`CONTINUOUS_DEPLOYMENT_GH_APP_ID`** | ✅ | GitHub App ID that has **write access** to the continuous-deployment repository. Used to generate a short-lived token for secure commits. |
+| **`CONTINUOUS_DEPLOYMENT_GH_APP_PRIVATE_KEY`** | ✅ | Private key for the GitHub App above. Required to sign and authenticate token requests. |
+
+### 🔐 Notes
+
+- You **must provide either** `ARGOCD_AUTH_TOKEN` **or** the combination of `ARGOCD_USERNAME` and `ARGOCD_PASSWORD`.
+- The GitHub App secrets (`CONTINUOUS_DEPLOYMENT_GH_APP_ID` and `CONTINUOUS_DEPLOYMENT_GH_APP_PRIVATE_KEY`) are **always required**.
+- Store secrets under **Repository Settings → Secrets and Variables → Actions** before running the workflow.
+
+---
+
 ## ⚙️ Job Summary
 
 ### 🧱 `restore`
