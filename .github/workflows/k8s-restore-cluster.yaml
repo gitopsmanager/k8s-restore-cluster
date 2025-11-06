@@ -3,6 +3,9 @@ name: Restore Cluster and Deploy ArgoCD (Matrix + Aggregation)
 on:
   workflow_call:
     inputs:
+      github_runner:
+        required: true
+        type: string
       ClusterRestoreSource:
         description: "Optional: Source cluster directory name"
         required: false
@@ -71,7 +74,7 @@ on:
 
 jobs:
   restore:
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.github_runner }}
     outputs:
       matrix: ${{ steps.build.outputs.matrix }}
     steps:
@@ -85,6 +88,15 @@ jobs:
           private-key: ${{ secrets.CONTINUOUS_DEPLOYMENT_GH_APP_PRIVATE_KEY }}
           owner: ${{ inputs.cd_repo_org }}
           repositories: ${{ inputs.cd_repo }}
+
+
+      - name: Checkout continuous-deployment repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.cd_repo_org }}/${{ inputs.cd_repo }}
+          token: ${{ steps.generate_token.outputs.token }}
+          path: continuous-deployment
+
 
       # --- Validate and restore logic ---
       - name: Validate and Restore Cluster
@@ -206,7 +218,7 @@ jobs:
 
   deploy:
     needs: restore
-    runs-on: [self-hosted, deployer]
+    runs-on:  ${{ inputs.github_runner }}
     strategy:
       fail-fast: false
       max-parallel: 5

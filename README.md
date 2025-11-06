@@ -13,7 +13,7 @@ It performs the following high-level steps:
 1. **Restore cluster** configuration (copy or reuse existing directory).  
 2. **Commit and merge** restored configuration changes via Auto-Commit-Squash-Merge.  
 3. **Generate a deployment matrix** dynamically from `create.json` files.  
-4. **Deploy ArgoCD applications** for each namespace/app in parallel using the ArgoCD Manage Applications action.  
+4. **Deploy ArgoCD applications** for each namespace/app in parallel using the ArgoCD-Manage-Applications action.  
 5. **Aggregate results** from all parallel jobs into a unified summary report.
 
 ---
@@ -56,7 +56,7 @@ It’s a **turnkey GitOps automation platform** for AWS and Azure — combining 
 | `namespace_filter` | Optional comma-separated list of namespaces or namespace:app pairs | ❌ No | `""` |
 | `cd_repo_org` | GitHub org/owner of the continuous-deployment repo | ✅ Yes | — |
 | `cd_repo` | Continuous-deployment repository name | ✅ Yes | — |
-| `argocd_auth_token` | ArgoCD auth token | ✅ Yes | — |
+| `github_runner` | **Self-hosted runner label** used for deployment and restore jobs (e.g. `self-hosted,deployer`) | ✅ Yes | — |
 | `insecure_argo` | Skip SSL verification for ArgoCD | ❌ No | `false` |
 | `delete_first` | Delete applications before redeploying | ❌ No | `false` |
 | `delete_only` | Delete applications without redeploying | ❌ No | `false` |
@@ -80,8 +80,8 @@ Secrets are never logged and must be defined in the **calling repository** (or o
 
 ### 🔐 Notes
 
-- You **must provide either** `ARGOCD_AUTH_TOKEN` **or** the combination of `ARGOCD_USERNAME` and `ARGOCD_PASSWORD`.
-- The GitHub App secrets (`CONTINUOUS_DEPLOYMENT_GH_APP_ID` and `CONTINUOUS_DEPLOYMENT_GH_APP_PRIVATE_KEY`) are **always required**.
+- You **must provide either** `ARGOCD_AUTH_TOKEN` **or** the combination of `ARGOCD_USERNAME` and `ARGOCD_PASSWORD`.  
+- The GitHub App secrets (`CONTINUOUS_DEPLOYMENT_GH_APP_ID` and `CONTINUOUS_DEPLOYMENT_GH_APP_PRIVATE_KEY`) are **always required**.  
 - Store secrets under **Repository Settings → Secrets and Variables → Actions** before running the workflow.
 
 ---
@@ -89,13 +89,14 @@ Secrets are never logged and must be defined in the **calling repository** (or o
 ## ⚙️ Job Summary
 
 ### 🧱 `restore`
-- Validates input directories and performs optional copy from source cluster.
-- If a new cluster directory is created, commits it via Auto-Commit-Squash-Merge.
+- Runs on the runner specified by the `github_runner` input (e.g., `self-hosted,deployer`).  
+- Validates input directories and performs optional copy from source cluster.  
+- If a new cluster directory is created, commits it via Auto-Commit-Squash-Merge.  
 - Builds a deployment matrix from all `create.json` files.
 
 ### 🚀 `deploy`
-- Runs in parallel (matrix) on `[self-hosted, deployer]` runners.  
-- Deploys applications in each namespace using ArgoCD Manage Applications.  
+- Executes parallel deployments (matrix) on `[self-hosted, deployer]` or another runner as configured by `github_runner`.  
+- Deploys applications in each namespace using ArgoCD-Manage-Applications.  
 - Uploads a per-namespace deployment summary.
 
 ### 📊 `aggregate`
@@ -105,29 +106,25 @@ Secrets are never logged and must be defined in the **calling repository** (or o
 
 ---
 
-## 🧠 Example Run
-
-This workflow can be triggered manually using **workflow_dispatch**:
+## 🧠 Example Call
 
 ```yaml
-on:
-  workflow_dispatch:
-    inputs:
-      ClusterRestoreSource: "cluster-dev"
+jobs:
+  restore:
+    uses: gitopsmanager/k8s-deploy/.github/workflows/k8s-restore-cluster.yml@v2
+    with:
+      ClusterRestoreSource: "cluster-staging"
       ClusterRestoreTarget: "cluster-prod"
       cd_repo_org: "affinity7software"
-      cd_repo: "k8s-deploy"
-      argocd_auth_token: ${{ secrets.ARGOCD_TOKEN }}
-```
+      cd_repo: "continuous-deployment"
+      github_runner: "self-hosted,deployer"
+      delete_first: false
+      delete_only: false
+    secrets:
+      ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
+      CONTINUOUS_DEPLOYMENT_GH_APP_ID: ${{ secrets.CONTINUOUS_DEPLOYMENT_GH_APP_ID }}
+      CONTINUOUS_DEPLOYMENT_GH_APP_PRIVATE_KEY: ${{ secrets.CONTINUOUS_DEPLOYMENT_GH_APP_PRIVATE_KEY }}
 
----
-
-## 🧩 Integration
-
-This workflow integrates the following components:
-- **Auto-Commit-Squash-Merge** → Commits restored cluster configuration to the continuous-deployment repo.  
-- **ArgoCD-Manage-Applications** → Deploys ArgoCD applications for each namespace.  
-- **Matrix + Aggregation** → Ensures all namespaces deploy concurrently, with combined results reported.
 
 ---
 
