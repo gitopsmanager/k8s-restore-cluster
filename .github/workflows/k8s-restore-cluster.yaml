@@ -326,9 +326,4 @@ jobs:
           delete_only:         ${{ inputs.delete_only }}
           skip_status_check:   ${{ inputs.skip_status_check }}
 
-      - name: Upload summary artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: argo-summary-${{ matrix.namespace }}-${{ matrix.overlay_dir }}
-          path: summary-${{ matrix.namespace }}-${{ matrix.overlay_dir }}.json
+
