@@ -182,6 +182,78 @@ jobs:
             echo "created=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # --- Fix UAMI client IDs in target manifests ---
+      - name: Fix UAMI client IDs in target manifests
+        if: ${{ inputs.cluster_restore_source != '' }}
+        uses: actions/github-script@v7
+        env:
+          SRC_CLUSTER: ${{ steps.env_src.outputs.cluster }}
+          TGT_CLUSTER: ${{ steps.env_tgt.outputs.cluster }}
+          SRC_UAMI_VARS_B64: ${{ steps.env_src.outputs.uami_vars_b64 }}
+          TGT_UAMI_VARS_B64: ${{ steps.env_tgt.outputs.uami_vars_b64 }}
+          TGT_DIR: continuous-deployment/${{ inputs.cluster_restore_target }}
+        with:
+          script: |
+            const fs = require("fs");
+            const path = require("path");
+            const { execSync } = require("child_process");
+
+            function decode(b64) {
+              try { return JSON.parse(Buffer.from(b64 || "", "base64").toString() || "{}"); }
+              catch { return {}; }
+            }
+
+            const srcCluster = process.env.SRC_CLUSTER;
+            const tgtCluster = process.env.TGT_CLUSTER;
+            const baseDir = process.env.TGT_DIR;
+            const srcUami = decode(process.env.SRC_UAMI_VARS_B64);
+            const tgtUami = decode(process.env.TGT_UAMI_VARS_B64);
+
+            core.info(`🔍 Scanning ${baseDir} for azure.workload.identity/client-id entries...`);
+
+            // 1️⃣ Find all YAML files that mention azure.workload.identity/client-id
+            let files = [];
+            try {
+              const grep = execSync(`grep -rl "azure.workload.identity/client-id" "${baseDir}" || true`, { encoding: "utf8" });
+              files = grep.split("\n").filter(Boolean);
+            } catch {
+              core.warning("⚠️ No files containing azure.workload.identity/client-id found.");
+            }
+
+            if (files.length === 0) {
+              core.info("✅ No UAMI references to update.");
+              return;
+            }
+
+            core.info(`📄 Found ${files.length} file(s) referencing azure.workload.identity/client-id`);
+            for (const file of files) {
+              let data = fs.readFileSync(file, "utf8");
+              let updated = data;
+              for (const [key, srcClientId] of Object.entries(srcUami)) {
+                const baseKey = key.replace(`${srcCluster}-`, "");
+                const tgtKey = `${tgtCluster}-${baseKey}`;
+                const newClientId = tgtUami[tgtKey] || tgtUami[baseKey];
+                if (!newClientId) continue;
+
+                const regex = new RegExp(
+                  `azure\\.workload\\.identity/client-id:\\s*${srcClientId}`,
+                  "g"
+                );
+                updated = updated.replace(
+                  regex,
+                  `azure.workload.identity/client-id: ${newClientId}`
+                );
+              }
+              if (updated !== data) {
+                fs.writeFileSync(file, updated, "utf8");
+                core.info(`🔁 Updated client IDs in ${file}`);
+              }
+            }
+            core.info("✅ Finished updating UAMI client IDs.");
+
+
+
+
       # --- Commit if new target created ---
       - name: Auto Commit and Squash Merge
         if: ${{ steps.restore.outputs.created == 'true' }}
