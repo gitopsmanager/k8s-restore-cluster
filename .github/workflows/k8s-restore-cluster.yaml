@@ -98,19 +98,57 @@ jobs:
           path: continuous-deployment
 
 
-      # --- Validate and restore logic ---
+      # --- Load source environment (if provided) ---
+      - name: Load Source Environment Config
+        if: ${{ inputs.cluster_restore_source != '' }}
+        id: env_src
+        uses: gitopsmanager/k8s-load-env@v1
+        env:
+          ENV_MAP: ${{ env.ENV_MAP }}
+        with:
+          env_map: ${{ inputs.env_map }}
+          target_environment: ${{ inputs.target_environment }}
+          target_cluster: ${{ inputs.cluster_restore_source }}
+          namespace: ${{ inputs.namespace }}
+
+      # --- Load target environment (always required) ---
+      - name: Load Target Environment Config
+        id: env_tgt
+        uses: gitopsmanager/k8s-load-env@v1
+        env:
+          ENV_MAP: ${{ env.ENV_MAP }}
+        with:
+          env_map: ${{ inputs.env_map }}
+          target_environment: ${{ inputs.target_environment }}
+          target_cluster: ${{ inputs.cluster_restore_target }}
+          namespace: ${{ inputs.namespace }}
+
+      # --- Debug env outputs ---
+      - name: Debug env outputs
+        run: |
+          echo "source_cluster='${{ steps.env_src.outputs.cluster }}'"
+          echo "source_dns_zone='${{ steps.env_src.outputs.dns_zone }}'"
+          echo "target_cluster='${{ steps.env_tgt.outputs.cluster }}'"
+          echo "target_dns_zone='${{ steps.env_tgt.outputs.dns_zone }}'"
+
+      # --- Validate and Restore Cluster ---
       - name: Validate and Restore Cluster
         id: restore
         run: |
           set -euo pipefail
+
           SRC="${{ inputs.cluster_restore_source }}"
           TGT="${{ inputs.cluster_restore_target }}"
           SRC_DIR="continuous-deployment/${SRC}"
           TGT_DIR="continuous-deployment/${TGT}"
 
+          SRC_CLUSTER="${{ steps.env_src.outputs.cluster }}"
+          TGT_CLUSTER="${{ steps.env_tgt.outputs.cluster }}"
+          SRC_DNS_ZONE="${{ steps.env_src.outputs.dns_zone }}"
+          TGT_DNS_ZONE="${{ steps.env_tgt.outputs.dns_zone }}"
+
           echo "🔍 Validating inputs..."
           if [ -n "$SRC" ]; then
-            # Source provided → must exist; target must not exist
             if [ ! -d "$SRC_DIR" ]; then
               echo "❌ Source '$SRC_DIR' does not exist."
               exit 1
@@ -119,13 +157,18 @@ jobs:
               echo "❌ Target '$TGT_DIR' already exists. Refusing to overwrite."
               exit 1
             fi
+
             echo "📂 Copying $SRC_DIR → $TGT_DIR"
             cp -r "$SRC_DIR" "$TGT_DIR"
-            echo "🔄 Replacing occurrences of '$SRC' with '$TGT'"
-            find "$TGT_DIR" -type f -exec sed -i "s/${SRC}/${TGT}/g" {} +
+
+            echo "🔄 Replacing cluster name '${SRC_CLUSTER}' → '${TGT_CLUSTER}'"
+            find "$TGT_DIR" -type f -exec sed -i "s/${SRC_CLUSTER}/${TGT_CLUSTER}/g" {} +
+
+            echo "🌍 Replacing DNS zone '${SRC_DNS_ZONE}' → '${TGT_DNS_ZONE}'"
+            find "$TGT_DIR" -type f -exec sed -i "s/${SRC_DNS_ZONE}/${TGT_DNS_ZONE}/g" {} +
+
             echo "created=true" >> "$GITHUB_OUTPUT"
           else
-            # No source provided → must have existing target
             if [ ! -d "$TGT_DIR" ]; then
               echo "❌ No source provided and target '$TGT_DIR' does not exist."
               exit 1
@@ -155,6 +198,7 @@ jobs:
         env:
           CLUSTER_TARGET: ${{ inputs.cluster_restore_target }}
           FILTER: ${{ inputs.namespace_filter }}
+          TARGET_DNS_ZONE: ${{ steps.env_tgt.outputs.dns_zone }}
         with:
           script: |
             const fs = require("fs");
@@ -186,7 +230,9 @@ jobs:
               return core.setOutput("matrix", "[]");
             }
 
+            const dnsZone = process.env.TARGET_DNS_ZONE || "example.com";
             const matrix = [];
+
             for (const f of files) {
               const json = JSON.parse(fs.readFileSync(f, "utf8"));
               const ns = json.namespace || "";
@@ -209,6 +255,7 @@ jobs:
                 namespace: ns,
                 overlay_dir: overlay,
                 cluster: cluster,
+                dns_zone: dnsZone,
                 apps: JSON.stringify(apps)
               });
             }
@@ -231,7 +278,7 @@ jobs:
       - name: Construct ArgoCD URL
         id: build_argo_url
         run: |
-          echo "url=https://${{ matrix.cluster }}-argocd-argocd-web-ui.example.com" >> $GITHUB_OUTPUT
+          echo "url=https://${{ matrix.cluster }}-argocd-argocd-web-ui.${{ matrix.dns_zone }}" >> $GITHUB_OUTPUT
 
       - name: Manage ArgoCD Applications
         uses: gitopsmanager/ArgoCD-Manage-Applications@v1
@@ -258,59 +305,3 @@ jobs:
         with:
           name: argo-summary-${{ matrix.namespace }}-${{ matrix.overlay_dir }}
           path: summary-${{ matrix.namespace }}-${{ matrix.overlay_dir }}.json
-
-  aggregate:
-    needs: deploy
-    runs-on: ubuntu-latest
-    if: always()
-    steps:
-      - name: Download all summaries
-        uses: actions/download-artifact@v4
-        with:
-          path: summaries
-
-      - name: Combine summaries
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require("fs");
-            const path = require("path");
-            const base = "summaries";
-            const files = [];
-            function walk(dir) {
-              for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-                const full = path.join(dir, e.name);
-                if (e.isDirectory()) walk(full);
-                else if (e.name.endsWith(".json")) files.push(full);
-              }
-            }
-            walk(base);
-
-            if (files.length === 0) {
-              core.warning("⚠️ No summary JSON files found.");
-              return;
-            }
-
-            const combined = {};
-            for (const f of files) {
-              try {
-                const data = JSON.parse(fs.readFileSync(f, "utf8"));
-                for (const [key, val] of Object.entries(data)) combined[key] = val;
-              } catch (err) {
-                core.warning(`⚠️ Could not parse ${f}: ${err.message}`);
-              }
-            }
-
-            const table = [["Namespace/App", "Created", "Synced"]];
-            for (const [key, val] of Object.entries(combined)) {
-              table.push([key, val.created || "❌", val.synced || "❌"]);
-            }
-
-            core.summary.addHeading("📊 Combined ArgoCD Summary").addTable(table).write();
-            core.info("📊 Combined ArgoCD Summary");
-            for (const row of table.slice(1)) {
-              core.info(`${row[0]} | Created: ${row[1]} | Synced: ${row[2]}`);
-            }
-
-            fs.writeFileSync("combined-summary.json", JSON.stringify(combined, null, 2));
-            core.setOutput("combined", JSON.stringify(combined));
