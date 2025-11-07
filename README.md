@@ -10,11 +10,14 @@ It then aggregates the deployment results into a single combined summary.
 This workflow is part of the GitOps automation framework. It coordinates full cluster restoration and application re-deployment by leveraging reusable composite actions.  
 It performs the following high-level steps:
 
-1. **Restore cluster** configuration (copy or reuse existing directory).  
-2. **Commit and merge** restored configuration changes via Auto-Commit-Squash-Merge.  
-3. **Generate a deployment matrix** dynamically from `create.json` files.  
-4. **Deploy ArgoCD applications** for each namespace/app in parallel using the ArgoCD-Manage-Applications action.  
-5. **Aggregate results** from all parallel jobs into a unified summary report.
+1. **Restore cluster** configuration — copy from a source cluster or reuse the
+   existing target directory if no source is specified.
+2. **Fix UAMI client IDs** in restored manifests (if copying from source) to
+   ensure Azure Workload Identity references match the target environment.
+3. **Commit and merge** restored configuration changes via Auto-Commit-Squash-Merge.  
+4. **Generate a deployment matrix** dynamically from `create.json` files.  
+5. **Deploy ArgoCD applications** for each namespace/app in parallel using the ArgoCD-Manage-Applications action.  
+6. **Aggregate results** from all parallel jobs into a unified summary report.
 
 ---
 
@@ -44,6 +47,7 @@ It’s a **turnkey GitOps automation platform** for AWS and Azure — combining 
 | **github-script** | Executes inline JavaScript for logic, JSON parsing, and summaries | [`actions/github-script`](https://github.com/actions/github-script) |
 | **checkout** | Clones the target repository for modification | [`actions/checkout`](https://github.com/actions/checkout) |
 | **upload-artifact / download-artifact** | Stores and retrieves summary artifacts between jobs | [`actions/upload-artifact`](https://github.com/actions/upload-artifact), [`actions/download-artifact`](https://github.com/actions/download-artifact) |
+| **UAMI remapping logic** | Implemented using JavaScript (`github-script@v7`) to detect and replace Azure Workload Identity client IDs in YAML manifests | *(inline step in workflow)* |
 
 ---
 
@@ -90,7 +94,14 @@ Secrets are never logged and must be defined in the **calling repository** (or o
 
 ### 🧱 `restore`
 - Runs on the runner specified by the `github_runner` input (e.g., `self-hosted,deployer`).  
-- Validates input directories and performs optional copy from source cluster.  
+- Validates input directories.  
+- If `cluster_restore_source` is provided, copies all manifests from the
+  source cluster to the target directory and performs search/replace on cluster
+  name and DNS zone values.
+- If no source cluster is provided, uses the existing target configuration as-is.
+- When restoring from a source cluster, automatically updates all
+  `azure.workload.identity/client-id` annotations in the target manifests
+  to match the target UAMI client IDs (cross-cluster remapping).  
 - If a new cluster directory is created, commits it via Auto-Commit-Squash-Merge.  
 - Builds a deployment matrix from all `create.json` files.
 
@@ -99,10 +110,10 @@ Secrets are never logged and must be defined in the **calling repository** (or o
 - Deploys applications in each namespace using ArgoCD-Manage-Applications.  
 - Uploads a per-namespace deployment summary.
 
-### 📊 `aggregate`
-- Downloads all deployment summaries.  
-- Combines them into a single `combined-summary.json` file.  
-- Adds a Markdown summary table to the workflow summary view.
+### 📊 `aggregate` (optional)
+- Aggregation is no longer required for normal use; each matrix job
+  generates its own ArgoCD summary table directly in the GitHub Actions UI.
+- You can remove this job unless cross-namespace aggregation is desired.
 
 ---
 
@@ -124,9 +135,30 @@ jobs:
       ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
       CONTINUOUS_DEPLOYMENT_GH_APP_ID: ${{ secrets.CONTINUOUS_DEPLOYMENT_GH_APP_ID }}
       CONTINUOUS_DEPLOYMENT_GH_APP_PRIVATE_KEY: ${{ secrets.CONTINUOUS_DEPLOYMENT_GH_APP_PRIVATE_KEY }}
-
-
 ---
+
+
+## 🔢 Versioning Policy — Official Release
+
+Starting with this release, all future versions follow the new **stable semantic tagging policy**.
+
+Previously, tags like `v1`, `v1.4`, and `v1.4.7` might have moved unpredictably.  
+From now on, they will always follow these simple, reliable rules:
+
+| Tag | Moves When | Purpose |
+|------|-------------|----------|
+| **`v1`** | Any new release in the `v1.x.x` series | Always points to the latest stable release in the major version line. |
+| **`v1.4`** | A new patch in the same minor version (e.g. `v1.4.7 → v1.4.8`) | Stays within that feature line. Receives only bug fixes and optimizations — no breaking changes. |
+| **`v1.4.7`** | Never | Fully immutable and reproducible. |
+
+### How to choose
+- **`@v1`** → Always up to date with the newest non-breaking changes.  
+- **`@v1.4`** → Stable feature line with fixes only.  
+- **`@v1.4.7`** → Frozen snapshot for exact reproducibility.
+
+All tags will now **increment forward permanently** — no re-use or re-tagging of old versions.  
+This marks the **official release** of the action under the **Affinity7 Consulting** stable versioning model.
+
 
 ## 📄 License
 
