@@ -211,7 +211,7 @@ jobs:
 
             const clusterDir = path.join("continuous-deployment", process.env.CLUSTER_TARGET);
             if (!fs.existsSync(clusterDir)) {
-              core.setFailed(`Cluster directory not found: ${clusterDir}`);
+              core.setFailed(`❌ Cluster directory not found: ${clusterDir}`);
               return;
             }
 
@@ -220,6 +220,7 @@ jobs:
               .map(s => s.trim())
               .filter(Boolean);
 
+            // Recursively find all create.json files under the cluster directory
             const files = [];
             function walk(dir) {
               for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -232,21 +233,39 @@ jobs:
 
             if (files.length === 0) {
               core.warning(`⚠️ No create.json found under ${clusterDir}`);
-              return core.setOutput("matrix", "[]");
+              core.setOutput("matrix", "[]");
+              return;
             }
 
-            const dnsZone = process.env.TARGET_DNS_ZONE || "example.com";
+            const dnsZone = process.env.TARGET_DNS_ZONE;
             const matrix = [];
 
             for (const f of files) {
               const json = JSON.parse(fs.readFileSync(f, "utf8"));
               const ns = json.namespace || "";
               const overlay = json.overlay_dir || "";
-              const cluster = json.cluster || "";
+              const cluster = json.cluster || process.env.CLUSTER_TARGET || "";
               const apps = json.applications || [];
-              const cdPathRel = f.replace(/^continuous-deployment\//, "").replace(/\/overlays\/.*$/, "");
+              const application = json.application || json.app_name || "";
 
-              // Apply namespace/app filtering
+              // --- Build cd_path_rel from JSON contents, not from file path ---
+              let cdPathRel = "";
+              if (cluster && application) {
+                cdPathRel = path.join(cluster, application);
+              } else if (cluster && ns) {
+                cdPathRel = path.join(cluster, ns); // fallback if app missing
+              } else {
+                core.warning(`⚠️ Could not determine cd_path_rel from ${f}`);
+                continue;
+              }
+
+              // --- Optional sanity check ---
+              const absPath = path.join("continuous-deployment", cdPathRel);
+              if (!fs.existsSync(absPath)) {
+                core.warning(`⚠️ Path ${absPath} does not exist (derived from ${f})`);
+              }
+
+              // --- Apply namespace/app filters ---
               const matchesNamespace = filters.includes(ns);
               const matchesApp = apps.some(a => filters.includes(`${ns}:${a.name}`));
               if (filters.length > 0 && !matchesNamespace && !matchesApp) {
@@ -263,10 +282,13 @@ jobs:
                 dns_zone: dnsZone,
                 apps: JSON.stringify(apps)
               });
+
+              core.info(`📦 Added ${cdPathRel} from ${path.relative("continuous-deployment", f)}`);
             }
 
             core.info(`✅ Found ${matrix.length} deployment(s)`);
             core.setOutput("matrix", JSON.stringify(matrix));
+
 
   deploy:
     needs: restore
