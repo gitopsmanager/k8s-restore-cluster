@@ -97,6 +97,11 @@ jobs:
           token: ${{ steps.generate_token.outputs.token }}
           path: continuous-deployment
 
+      - name: Import ENV_MAP from runner
+        shell: bash
+        run: |
+          printf "ENV_MAP<<EOF\n%s\nEOF\n" "$ENV_MAP" >> $GITHUB_ENV
+
 
       # --- Load source environment (if provided) ---
       - name: Load Source Environment Config
