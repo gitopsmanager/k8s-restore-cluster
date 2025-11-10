@@ -286,6 +286,7 @@ jobs:
       # --- Validate and Restore Cluster ---
       - name: Validate and Restore Cluster
         id: restore
+        if: ${{ !inputs.backfill_create_json }}
         run: |
           set -euo pipefail
 
@@ -331,7 +332,7 @@ jobs:
 
       # --- Fix UAMI client IDs in target manifests ---
       - name: Fix UAMI client IDs in target manifests
-        if: ${{ inputs.cluster_restore_source != '' }}
+        if: ${{ inputs.cluster_restore_source != '' && !inputs.backfill_create_json }}
         uses: actions/github-script@v7
         env:
           SRC_CLUSTER: ${{ steps.env_src.outputs.cluster }}
@@ -403,7 +404,7 @@ jobs:
 
       # --- Commit if new target created ---
       - name: Auto Commit and Squash Merge
-        if: ${{ steps.restore.outputs.created == 'true' }}
+        if: ${{ steps.restore.outputs.created == 'true' && !inputs.backfill_create_json }}
         uses: gitopsmanager/Auto-Commit-Squash-Merge@v1
         with:
           token: ${{ steps.token.outputs.token }}
@@ -418,6 +419,7 @@ jobs:
       # --- Build matrix from create.json ---
       - name: Build Matrix from create.json
         id: build
+        if: ${{ !inputs.backfill_create_json }}
         uses: actions/github-script@v7
         env:
           CLUSTER_TARGET: ${{ inputs.cluster_restore_target }}
@@ -511,6 +513,7 @@ jobs:
 
   deploy:
     needs: restore
+    if: ${{ !inputs.backfill_create_json }}
     runs-on:  ${{ inputs.github_runner }}
     strategy:
       fail-fast: false
