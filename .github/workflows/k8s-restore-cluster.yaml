@@ -245,13 +245,13 @@ jobs:
               };
 
               // --- Log preview to console ---
-              core.startGroup(`🆕 Would create: ${path.relative(".", createJson)}`);
+              core.startGroup(`🆕 Creating: ${path.relative(".", createJson)}`);
               core.info(JSON.stringify(jsonData, null, 2));
               core.endGroup();
 
               // Uncomment to actually write files:
-              // fs.mkdirSync(relDir, { recursive: true });
-              // fs.writeFileSync(createJson, JSON.stringify(jsonData, null, 2), "utf8");
+              fs.mkdirSync(relDir, { recursive: true });
+              fs.writeFileSync(createJson, JSON.stringify(jsonData, null, 2), "utf8");
 
               created++;
             }
