@@ -155,7 +155,7 @@ jobs:
         uses: gitopsmanager/ArgoCD-Manage-Applications@v1
         with:
           list_only: "true"
-          argocd_url:          https://${{ inputs.backfill_cluster }}-argocd-argocd-web-ui.${{ steps.env_tgt.outputs.dns_zone }}
+          argocd_url:          https://${{ steps.env_tgt.outputs.cluster }}-argocd-argocd-web-ui.${{ steps.env_tgt.outputs.dns_zone }}
           argocd_auth_token:   ${{ secrets.ARGOCD_AUTH_TOKEN }}
           argocd_username:     ${{ secrets.ARGOCD_USERNAME }}
           argocd_password:     ${{ secrets.ARGOCD_PASSWORD }}
