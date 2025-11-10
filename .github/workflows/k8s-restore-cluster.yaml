@@ -283,7 +283,6 @@ jobs:
         shell: bash
 
 
-      # --- Validate and Restore Cluster ---
       - name: Validate and Restore Cluster
         id: restore
         if: ${{ !inputs.backfill_create_json }}
@@ -299,6 +298,8 @@ jobs:
           TGT_CLUSTER="${{ steps.env_tgt.outputs.cluster }}"
           SRC_DNS_ZONE="${{ steps.env_src.outputs.dns_zone }}"
           TGT_DNS_ZONE="${{ steps.env_tgt.outputs.dns_zone }}"
+          SRC_REGISTRY="${{ steps.env_src.outputs.container_registry }}"
+          TGT_REGISTRY="${{ steps.env_tgt.outputs.container_registry }}"
 
           echo "🔍 Validating inputs..."
           if [ -n "$SRC" ]; then
@@ -320,6 +321,14 @@ jobs:
             echo "🌍 Replacing DNS zone '${SRC_DNS_ZONE}' → '${TGT_DNS_ZONE}'"
             find "$TGT_DIR" -type f -exec sed -i "s/${SRC_DNS_ZONE}/${TGT_DNS_ZONE}/g" {} +
 
+            # --- Replace container registry if defined ---
+            if [ -n "$SRC_REGISTRY" ] && [ -n "$TGT_REGISTRY" ] && [ "$SRC_REGISTRY" != "$TGT_REGISTRY" ]; then
+              echo "🧩 Replacing container registry '${SRC_REGISTRY}' → '${TGT_REGISTRY}'"
+              find "$TGT_DIR" -type f -exec sed -i "s#${SRC_REGISTRY}#${TGT_REGISTRY}#g" {} +
+            else
+              echo "ℹ️ Registry replacement skipped (identical or missing values)."
+            fi
+
             echo "created=true" >> "$GITHUB_OUTPUT"
           else
             if [ ! -d "$TGT_DIR" ]; then
@@ -329,6 +338,8 @@ jobs:
             echo "ℹ️ No source provided. Using existing target cluster '$TGT_DIR'."
             echo "created=false" >> "$GITHUB_OUTPUT"
           fi
+
+
 
       # --- Fix UAMI client IDs in target manifests ---
       - name: Fix UAMI client IDs in target manifests
