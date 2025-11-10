@@ -168,14 +168,13 @@ jobs:
           apps:                "[]"
 
 
-
       - name: Generate and print missing create.json files
-        if: ${{ inputs.backfill_create_json && steps.list.outputs.applications != '' }}
+        if: ${{ inputs.backfill_create_json }}
         id: backfill_create
         uses: actions/github-script@v7
         env:
           CLUSTER_TARGET: ${{ inputs.cluster_restore_target }}
-          APPS_JSON: ${{ steps.list.outputs.applications }}
+          JSON_FILE: ${{ steps.list.outputs.json_file }}
           CD_REPO: continuous-deployment
           CD_REPO_ORG: ${{ inputs.cd_repo_org }}
           CD_REPO_NAME: ${{ inputs.cd_repo }}
@@ -187,21 +186,20 @@ jobs:
             const cluster = process.env.CLUSTER_TARGET;
             const repo = `${process.env.CD_REPO_ORG}/${process.env.CD_REPO_NAME}`;
             const baseDir = path.join(process.env.CD_REPO, cluster);
-            const appsJson = process.env.APPS_JSON;
+            const jsonFile = process.env.JSON_FILE;
 
-            if (!appsJson || appsJson.trim() === "") {
-              core.info("⚠️ No applications JSON found, skipping backfill.");
+            if (!fs.existsSync(jsonFile)) {
+              core.setFailed(`❌ ArgoCD applications file not found: ${jsonFile}`);
               return;
             }
 
-            fs.mkdirSync(baseDir, { recursive: true });
-
+            const appsJson = fs.readFileSync(jsonFile, "utf8");
             let apps;
             try {
               const parsed = JSON.parse(appsJson);
               apps = parsed.items || [];
             } catch (err) {
-              core.setFailed("❌ Failed to parse APPS_JSON: " + err.message);
+              core.setFailed("❌ Failed to parse ArgoCD applications JSON: " + err.message);
               return;
             }
 
@@ -252,7 +250,7 @@ jobs:
               core.info(JSON.stringify(jsonData, null, 2));
               core.endGroup();
 
-              // Uncomment the lines below when ready to actually write files:
+              // Uncomment to actually write files:
               // fs.mkdirSync(relDir, { recursive: true });
               // fs.writeFileSync(createJson, JSON.stringify(jsonData, null, 2), "utf8");
 
