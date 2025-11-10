@@ -264,7 +264,7 @@ jobs:
 
 
       - name: Auto Commit and Squash Merge Backfill
-        if: ${{ false && inputs.backfill_create_json && steps.list.outputs.applications != '' }}
+        if: ${{ inputs.backfill_create_json }}
         uses: gitopsmanager/Auto-Commit-Squash-Merge@v1
         with:
           token: ${{ steps.generate_token.outputs.token }}
