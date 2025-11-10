@@ -150,27 +150,94 @@ jobs:
 
 
 
-      - name: Backfill Cluster Create Descriptors
-        if: ${{ inputs.backfill_create_json }}
-        runs-on: ${{ inputs.github_runner }}
-        steps:
-          - uses: actions/checkout@v4
+      - name: Backfill create.json for cluster
+        id: list  # ✅ Added ID so outputs can be used below
+        uses: gitopsmanager/ArgoCD-Manage-Applications@v1
+        with:
+          list_only: "true"
+          argocd_url:          https://${{ inputs.backfill_cluster }}-argocd-argocd-web-ui.${{ steps.env_tgt.outputs.dns_zone }}
+          argocd_auth_token:   ${{ secrets.ARGOCD_AUTH_TOKEN }}
+          argocd_username:     ${{ secrets.ARGOCD_USERNAME }}
+          argocd_password:     ${{ secrets.ARGOCD_PASSWORD }}
+          insecure_argo:       ${{ inputs.insecure_argo }}
+          argocd_ca_cert:      ${{ secrets.ARGOCD_CA_CERT }}
+          namespace:           default
+          cd_repo:             ${{ inputs.cd_repo }}
+          cd_repo_org:         ${{ inputs.cd_repo_org }}
+          cd_path_rel:         dummy
+          apps:                "[]"
 
-          - name: Backfill create.json for cluster
-            uses: gitopsmanager/ArgoCD-Manage-Applications@v1
-            with:
-              list_only:    "true"
-              argocd_url:          https://${{ inputs.backfill_cluster }}-argocd-argocd-web-ui.${{ steps.env_tgt.outputs.dns_zone }}
-              argocd_auth_token:   ${{ secrets.ARGOCD_AUTH_TOKEN }}
-              argocd_username:     ${{ secrets.ARGOCD_USERNAME }}
-              argocd_password:     ${{ secrets.ARGOCD_PASSWORD }}
-              insecure_argo:       ${{ inputs.insecure_argo }}
-              argocd_ca_cert:      ${{ secrets.ARGOCD_CA_CERT }}
-              namespace:           default
-              cd_repo:             ${{ inputs.cd_repo }}
-              cd_repo_org:         ${{ inputs.cd_repo_org }}
-              cd_path_rel:         dummy
-              apps:                "[]"
+      - name: Generate and print missing create.json files
+        if: ${{ inputs.backfill_create_json && steps.list.outputs.applications != '' }}
+        id: backfill_create
+        uses: actions/github-script@v7
+        env:
+          CLUSTER_TARGET: ${{ inputs.cluster_restore_target }}
+          APPS_JSON: ${{ steps.list.outputs.applications }}
+          CD_REPO: continuous-deployment
+          CD_REPO_ORG: ${{ inputs.cd_repo_org }}
+          CD_REPO_NAME: ${{ inputs.cd_repo }}
+        with:
+          script: |
+            const fs = require("fs");
+            const path = require("path");
+
+            const cluster = process.env.CLUSTER_TARGET;
+            const repo = `${process.env.CD_REPO_ORG}/${process.env.CD_REPO_NAME}`;
+            const baseDir = path.join(process.env.CD_REPO, cluster);
+            const appsJson = process.env.APPS_JSON;
+
+            if (!appsJson || appsJson.trim() === "") {
+              core.info("⚠️ No applications JSON found, skipping backfill.");
+              return;
+            }
+
+            let apps;
+            try {
+              const parsed = JSON.parse(appsJson);
+              apps = parsed.items || [];
+            } catch (err) {
+              core.setFailed("❌ Failed to parse APPS_JSON: " + err.message);
+              return;
+            }
+
+            core.info(`📋 Simulating backfill for cluster '${cluster}' (${apps.length} apps)...`);
+
+            for (const app of apps) {
+              const ns = app?.spec?.destination?.namespace || "default";
+              const fullName = app?.metadata?.name || "unknown";
+              const shortName = fullName.startsWith(`${ns}-`)
+                ? fullName.substring(ns.length + 1)
+                : fullName;
+              const srcPath = app?.spec?.source?.path || "";
+
+              let overlayDir = "";
+              let cleanPath = srcPath;
+              const overlayMatch = srcPath.match(/\/overlays\/([^/]+)/);
+              if (overlayMatch) {
+                overlayDir = overlayMatch[1];
+                cleanPath = srcPath.replace(`/overlays/${overlayDir}`, "");
+              }
+
+              const relDir = path.join(baseDir, ns, shortName, "create.json");
+              const jsonData = {
+                cluster,
+                namespace: ns,
+                overlay_dir: overlayDir,
+                applications: [
+                  {
+                    name: shortName,
+                    repo,
+                    path: cleanPath
+                  }
+                ]
+              };
+
+              core.startGroup(`🆕 Would create: ${relDir}`);
+              core.info(JSON.stringify(jsonData, null, 2));
+              core.endGroup();
+            }
+
 
 
 
