@@ -273,7 +273,7 @@ jobs:
           namespace: "cluster-backfill"
           cluster: ${{ inputs.cluster_restore_target }}
           app_name: "backfill-create-json"
-          repo_path_rel: "continuous-deployment/${{ inputs.cluster_restore_target }}"
+          repo_path_rel: continuous-deployment/${{ inputs.cluster_restore_target }}
           delete_only: false
 
 
