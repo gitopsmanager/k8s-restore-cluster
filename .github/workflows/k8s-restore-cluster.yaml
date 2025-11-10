@@ -185,7 +185,7 @@ jobs:
 
             const cluster = process.env.CLUSTER_TARGET;
             const repo = `${process.env.CD_REPO_ORG}/${process.env.CD_REPO_NAME}`;
-            const baseDir = path.join(process.env.CD_REPO, cluster);
+            const baseDir = path.join(process.env.GITHUB_WORKSPACE, process.env.CD_REPO, cluster);
             const jsonFile = process.env.JSON_FILE;
 
             if (!fs.existsSync(jsonFile)) {
