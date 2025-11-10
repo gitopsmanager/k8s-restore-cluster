@@ -278,7 +278,7 @@ jobs:
 
 
       - name: Exit after backfill 
-        if: ${{ inputs.backfill_cluster != '' }}
+        if: ${{ inputs.backfill_create_json }}
         run: exit 0
         shell: bash
 
