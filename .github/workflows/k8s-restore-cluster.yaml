@@ -518,7 +518,7 @@ jobs:
 
               let cdPathRel = "";
               if (cluster && apps.length > 0 && apps[0].name) {
-                cdPathRel = path.join(cluster, ns, apps[0].name);
+                cdPathRel = path.join(cluster, ns);
               } else {
                 core.warning(`⚠️ No valid application name found in ${f}`);
                 continue;
