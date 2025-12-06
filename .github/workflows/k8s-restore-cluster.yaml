@@ -450,22 +450,24 @@ jobs:
 
             let rawFilter = process.env.FILTER;
 
-            // Always declare before use
+            // Always declare first
             let no_filter = false;
 
-            // Normalize to string
-            rawFilter = rawFilter == null ? "" : String(rawFilter).trim();
+            // Normalize nullish values
+            rawFilter = rawFilter == null ? "" : String(rawFilter);
 
-            // If rawFilter is now empty OR null-like → no filter
-            if (
-              rawFilter === "" ||
-              rawFilter === "null" ||
-              rawFilter === "undefined"
-            ) {
+            // Remove invisible Unicode characters (critical)
+            rawFilter = rawFilter.replace(/[\u0000-\u001F\u007F-\u00A0\u200B\uFEFF]/g, "");
+
+            // Trim normal whitespace
+            rawFilter = rawFilter.trim();
+
+            // --- Apply your rule: enable filtering only if length > 2 ---
+            if (rawFilter.length <= 2) {
               no_filter = true;
             }
 
-            // Parse only if filtering is enabled
+            // Parse filters only if enabled
             let filters = [];
 
             if (!no_filter) {
@@ -474,13 +476,14 @@ jobs:
                 .map(s => s.trim())
                 .filter(Boolean);
 
-              // If parsing produced no real tokens → also no filter
+              // If parsing yields nothing (e.g. ",") → disable filtering
               if (filters.length === 0) {
                 no_filter = true;
               }
             }
 
-            core.info(`DEBUG FILTER → raw="${rawFilter}" filters=[${filters}], no_filter=${no_filter}`);
+            core.info(`FILTER DEBUG → raw="${rawFilter}" filters=[${filters}], no_filter=${no_filter}`);
+
 
 
 
