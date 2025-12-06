@@ -477,19 +477,19 @@ jobs:
               const ns = json.namespace || "";
               const overlay = json.overlay_dir || "";
               const cluster = json.cluster || process.env.CLUSTER_TARGET || "";
-              const apps = json.applications || [];
-              const application = json.application || json.app_name || "";
 
-              // --- Build cd_path_rel from JSON contents, not from file path ---
-              let cdPathRel = "";
-              if (cluster && application) {
-                cdPathRel = path.join(cluster, application);
-              } else if (cluster && ns) {
-                cdPathRel = path.join(cluster, ns); // fallback if app missing
-              } else {
-                core.warning(`⚠️ Could not determine cd_path_rel from ${f}`);
-                continue;
-              }
+
+            const apps = json.applications || [];
+
+            let cdPathRel = "";
+            if (cluster && apps.length > 0 && apps[0].name) {
+              cdPathRel = path.join(cluster, ns, apps[0].name);
+            } else {
+              core.warning(`⚠️ No valid application name found in ${f}`);
+              continue;
+            }
+
+              
 
               // --- Optional sanity check ---
               const absPath = path.join("continuous-deployment", cdPathRel);
