@@ -499,7 +499,7 @@ jobs:
               // --- Apply namespace/app filters ---
               const matchesNamespace = filters.includes(ns);
               const matchesApp = apps.some(a => filters.includes(`${ns}:${a.name}`));
-              if (filters.length > 0 && !matchesNamespace && !matchesApp) {
+              if (filters.length > 0 && filter != null && filter != "" && !matchesNamespace && !matchesApp) {
                 core.info(`⏭️ Skipping ${f} (not in filter)`);
                 continue;
               }
