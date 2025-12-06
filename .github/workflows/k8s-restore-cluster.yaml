@@ -448,6 +448,8 @@ jobs:
             }
 
             let rawFilter = process.env.FILTER;
+            let no_filter = false;
+
 
             if (
               rawFilter === null ||
