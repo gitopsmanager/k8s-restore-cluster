@@ -449,14 +449,26 @@ jobs:
 
             let rawFilter = process.env.FILTER;
 
-            if (!rawFilter || rawFilter === "undefined" || rawFilter === "null") {
+            if (
+              rawFilter === null ||
+              rawFilter === undefined ||
+              rawFilter === "null" ||
+              rawFilter === "undefined" ||
+              rawFilter === ""
+            ) {
+              no_filter = true;
               rawFilter = "";
-            }            
+            }
 
-            const filters = rawFilter
-              .split(",")
-              .map(s => s.trim())
-              .filter(Boolean);
+            // Convert to list
+            let filters = rawFilter.split(",").map(s => s.trim()).filter(Boolean);
+
+            // If filters is now empty => also treat as no filter
+            if (filters.length === 0) {
+              no_filter = true;
+            }
+
+            core.info(`Filter raw="${rawFilter}", parsed=[${filters}], no_filter=${no_filter}`);
 
             // Recursively find all create.json files under the cluster directory
             const files = [];
@@ -502,12 +514,14 @@ jobs:
                 core.warning(`⚠️ Path ${absPath} does not exist (derived from ${f})`);
               }
 
-              // --- Apply namespace/app filters ---
-              const matchesNamespace = filters.includes(ns);
-              const matchesApp = apps.some(a => filters.includes(`${ns}:${a.name}`));
-              if (Array.isArray(filters) && filters.length > 0  && !matchesNamespace && !matchesApp) {
-                core.info(`⏭️ Skipping ${f} (not in filter)`);
-                continue;
+              if (!no_filter) {
+                // --- Apply namespace/app filters ---
+                const matchesNamespace = filters.includes(ns);
+                const matchesApp = apps.some(a => filters.includes(`${ns}:${a.name}`));
+                if (!matchesNamespace && !matchesApp) {
+                  core.info(`⏭️ Skipping ${f} (not in filter)`);
+                  continue;
+                }
               }
 
               matrix.push({
