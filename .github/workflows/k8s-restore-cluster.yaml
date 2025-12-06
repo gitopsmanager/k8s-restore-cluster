@@ -447,30 +447,42 @@ jobs:
               return;
             }
 
+
             let rawFilter = process.env.FILTER;
+
+            // Always declare before use
             let no_filter = false;
 
+            // Normalize to string
+            rawFilter = rawFilter == null ? "" : String(rawFilter).trim();
 
+            // If rawFilter is now empty OR null-like → no filter
             if (
-              rawFilter === null ||
-              rawFilter === undefined ||
+              rawFilter === "" ||
               rawFilter === "null" ||
-              rawFilter === "undefined" ||
-              rawFilter === ""
+              rawFilter === "undefined"
             ) {
               no_filter = true;
-              rawFilter = "";
             }
 
-            // Convert to list
-            let filters = rawFilter.split(",").map(s => s.trim()).filter(Boolean);
+            // Parse only if filtering is enabled
+            let filters = [];
 
-            // If filters is now empty => also treat as no filter
-            if (filters.length === 0) {
-              no_filter = true;
+            if (!no_filter) {
+              filters = rawFilter
+                .split(",")
+                .map(s => s.trim())
+                .filter(Boolean);
+
+              // If parsing produced no real tokens → also no filter
+              if (filters.length === 0) {
+                no_filter = true;
+              }
             }
 
-            core.info(`Filter raw="${rawFilter}", parsed=[${filters}], no_filter=${no_filter}`);
+            core.info(`DEBUG FILTER → raw="${rawFilter}" filters=[${filters}], no_filter=${no_filter}`);
+
+
 
             // Recursively find all create.json files under the cluster directory
             const files = [];
