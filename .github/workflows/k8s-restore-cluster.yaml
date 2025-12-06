@@ -447,7 +447,13 @@ jobs:
               return;
             }
 
-            const filters = (process.env.FILTER || "")
+            let rawFilter = process.env.FILTER;
+
+            if (!rawFilter || rawFilter === "undefined" || rawFilter === "null") {
+              rawFilter = "";
+            }            
+
+            const filters = rawFilter
               .split(",")
               .map(s => s.trim())
               .filter(Boolean);
@@ -499,7 +505,7 @@ jobs:
               // --- Apply namespace/app filters ---
               const matchesNamespace = filters.includes(ns);
               const matchesApp = apps.some(a => filters.includes(`${ns}:${a.name}`));
-              if (filters.length > 0 && filter != null && filter != "" && !matchesNamespace && !matchesApp) {
+              if (Array.isArray(filters) && filters.length > 0  && !matchesNamespace && !matchesApp) {
                 core.info(`⏭️ Skipping ${f} (not in filter)`);
                 continue;
               }
