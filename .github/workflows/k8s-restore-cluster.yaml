@@ -479,17 +479,16 @@ jobs:
               const cluster = json.cluster || process.env.CLUSTER_TARGET || "";
 
 
-            const apps = json.applications || [];
+              const apps = json.applications || [];
 
-            let cdPathRel = "";
-            if (cluster && apps.length > 0 && apps[0].name) {
-              cdPathRel = path.join(cluster, ns, apps[0].name);
-            } else {
-              core.warning(`⚠️ No valid application name found in ${f}`);
-              continue;
-            }
+              let cdPathRel = "";
+              if (cluster && apps.length > 0 && apps[0].name) {
+                cdPathRel = path.join(cluster, ns, apps[0].name);
+              } else {
+                core.warning(`⚠️ No valid application name found in ${f}`);
+                continue;
+              }
 
-              
 
               // --- Optional sanity check ---
               const absPath = path.join("continuous-deployment", cdPathRel);
