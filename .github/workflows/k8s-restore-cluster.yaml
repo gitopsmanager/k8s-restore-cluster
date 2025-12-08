@@ -456,8 +456,6 @@ jobs:
             // Normalize nullish values
             rawFilter = rawFilter == null ? "" : String(rawFilter);
 
-            // Remove invisible Unicode characters (critical)
-            rawFilter = rawFilter.replace(/[\u0000-\u001F\u007F-\u00A0\u200B\uFEFF]/g, "");
 
             // Trim normal whitespace
             rawFilter = rawFilter.trim();
@@ -468,13 +466,13 @@ jobs:
             }
 
             // Parse filters only if enabled
-            let filters = [];
+            let filters = "";
 
             if (!no_filter) {
               filters = rawFilter
-                .split(",")
-                .map(s => s.trim())
-                .filter(Boolean);
+              .split(",")
+              .map(s => s.trim())
+              .filter(Boolean);
 
               // If parsing yields nothing (e.g. ",") → disable filtering
               if (filters.length === 0) {
@@ -482,8 +480,7 @@ jobs:
               }
             }
 
-            core.info(`FILTER DEBUG → raw="${rawFilter}" filters=[${filters}], no_filter=${no_filter}`);
-
+            core.info(`FILTER DEBUG → raw="${rawFilter}" filters=${filters}, no_filter=${no_filter}`);
 
 
 
