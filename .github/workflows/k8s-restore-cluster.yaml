@@ -89,12 +89,14 @@ jobs:
     runs-on: ${{ inputs.github_runner }}
     outputs:
       matrix: ${{ steps.build.outputs.matrix }}
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Generate GitHub App token
         id: generate_token
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.CONTINUOUS_DEPLOYMENT_GH_APP_ID }}
           private-key: ${{ secrets.CONTINUOUS_DEPLOYMENT_GH_APP_PRIVATE_KEY }}
@@ -103,7 +105,7 @@ jobs:
 
 
       - name: Checkout continuous-deployment repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: ${{ inputs.cd_repo_org }}/${{ inputs.cd_repo }}
           token: ${{ steps.generate_token.outputs.token }}
@@ -171,7 +173,7 @@ jobs:
       - name: Generate and print missing create.json files
         if: ${{ inputs.backfill_create_json }}
         id: backfill_create
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         env:
           CLUSTER_TARGET: ${{ inputs.cluster_restore_target }}
           JSON_FILE: ${{ steps.list.outputs.json_file }}
@@ -344,7 +346,7 @@ jobs:
       # --- Fix UAMI client IDs in target manifests ---
       - name: Fix UAMI client IDs in target manifests
         if: ${{ inputs.cluster_restore_source != '' && !inputs.backfill_create_json }}
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         env:
           SRC_CLUSTER: ${{ steps.env_src.outputs.cluster }}
           TGT_CLUSTER: ${{ steps.env_tgt.outputs.cluster }}
@@ -431,7 +433,7 @@ jobs:
       - name: Build Matrix from create.json
         id: build
         if: ${{ !inputs.backfill_create_json }}
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         env:
           CLUSTER_TARGET: ${{ inputs.cluster_restore_target }}
           FILTER: ${{ inputs.namespace_filter }}
@@ -564,9 +566,11 @@ jobs:
       max-parallel: 5
       matrix:
         include: ${{ fromJSON(needs.restore.outputs.matrix) }}
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Construct ArgoCD URL
         id: build_argo_url
