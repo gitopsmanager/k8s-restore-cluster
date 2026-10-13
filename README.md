@@ -47,7 +47,7 @@ It’s a **turnkey GitOps automation platform** for AWS and Azure — combining 
 | **github-script** | Executes inline JavaScript for logic, JSON parsing, and summaries | [`actions/github-script`](https://github.com/actions/github-script) |
 | **checkout** | Clones the target repository for modification | [`actions/checkout`](https://github.com/actions/checkout) |
 | **upload-artifact / download-artifact** | Stores and retrieves summary artifacts between jobs | [`actions/upload-artifact`](https://github.com/actions/upload-artifact), [`actions/download-artifact`](https://github.com/actions/download-artifact) |
-| **UAMI remapping logic** | Implemented using JavaScript (`github-script@v7`) to detect and replace Azure Workload Identity client IDs in YAML manifests | *(inline step in workflow)* |
+| **UAMI remapping logic** | Implemented using JavaScript (`github-script@v9`) to detect and replace Azure Workload Identity client IDs in YAML manifests | *(inline step in workflow)* |
 
 ---
 
@@ -122,7 +122,7 @@ Secrets are never logged and must be defined in the **calling repository** (or o
 ```yaml
 jobs:
   restore:
-    uses: gitopsmanager/k8s-deploy/.github/workflows/k8s-restore-cluster.yml@v2
+    uses: gitopsmanager/k8s-restore-cluster/.github/workflows/k8s-restore-cluster.yaml@v1
     with:
       cluster_restore_source: "cluster-staging"
       cluster_restore_target: "cluster-prod"
@@ -135,6 +135,8 @@ jobs:
       ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}
       CONTINUOUS_DEPLOYMENT_GH_APP_ID: ${{ secrets.CONTINUOUS_DEPLOYMENT_GH_APP_ID }}
       CONTINUOUS_DEPLOYMENT_GH_APP_PRIVATE_KEY: ${{ secrets.CONTINUOUS_DEPLOYMENT_GH_APP_PRIVATE_KEY }}
+```
+
 ---
 
 
